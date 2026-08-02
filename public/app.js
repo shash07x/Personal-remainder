@@ -1,8 +1,9 @@
 /**
- * Chronos - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB Connected)
+ * Chronos - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB + FCM Connected)
  */
 
 import { initThreeBackground, updateThreeTheme } from './three-bg.js';
+import { initFirebaseMessaging, requestFcmToken } from './firebase-init.js';
 
 const API_BASE = '/api/todos';
 
@@ -17,7 +18,7 @@ let activeScreen = 'tasks';
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initThreeBackground();
-  registerServiceWorker();
+  initFCM();
   loadTodos();
   setupEventListeners();
   setupScreenNavigation();
@@ -25,24 +26,23 @@ document.addEventListener('DOMContentLoaded', () => {
   checkNotificationStatus();
 });
 
-// Register Service Worker for Mobile & Web Push
-function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => {
-        console.log('[Chronos SW] Registered successfully:', reg.scope);
-        const swText = document.getElementById('swStatusText');
-        if (swText) swText.textContent = 'Active (sw.js Registered)';
-      })
-      .catch(err => {
-        console.warn('[Chronos SW] Registration failed:', err);
-      });
-  }
+// Initialize Firebase Cloud Messaging (FCM)
+function initFCM() {
+  initFirebaseMessaging((payload) => {
+    // Foreground message handler
+    const title = payload.notification ? payload.notification.title : (payload.data ? payload.data.title : 'Chronos Alert');
+    const body = payload.notification ? payload.notification.body : (payload.data ? payload.data.body : 'Deadline Reached!');
+    
+    playChime();
+    showToast(`${title}: ${body}`);
+  });
+
+  const swText = document.getElementById('swStatusText');
+  if (swText) swText.textContent = 'Active (FCM & sw.js Registered)';
 }
 
 // Multi-Screen Router
 function setupScreenNavigation() {
-  // Top nav tabs & bottom nav items
   document.querySelectorAll('[data-screen]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const target = e.currentTarget.dataset.screen;
@@ -50,7 +50,6 @@ function setupScreenNavigation() {
     });
   });
 
-  // Mobile Floating Action Button (FAB)
   const fab = document.getElementById('mobileFabBtn');
   if (fab) {
     fab.addEventListener('click', () => switchScreen('create'));
@@ -60,7 +59,6 @@ function setupScreenNavigation() {
 function switchScreen(screenName) {
   activeScreen = screenName;
 
-  // Toggle active view screen container
   document.querySelectorAll('.view-screen').forEach(screen => {
     screen.classList.remove('active');
   });
@@ -68,19 +66,16 @@ function switchScreen(screenName) {
   const activeEl = document.getElementById(`screen-${screenName}`);
   if (activeEl) activeEl.classList.add('active');
 
-  // Sync desktop top tabs
   document.querySelectorAll('.nav-tab-btn').forEach(tab => {
     if (tab.dataset.screen === screenName) tab.classList.add('active');
     else tab.classList.remove('active');
   });
 
-  // Sync mobile bottom nav bar items
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
     if (item.dataset.screen === screenName) item.classList.add('active');
     else item.classList.remove('active');
   });
 
-  // Smooth scroll to top
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -184,7 +179,7 @@ async function handleAddTodo(e) {
 
   render();
   document.getElementById('todoForm').reset();
-  switchScreen('tasks'); // Auto navigate back to Tasks screen on creation!
+  switchScreen('tasks');
 }
 
 // Bulk CSV / JSON Parser
@@ -267,7 +262,6 @@ function processFile(file) {
         }
       } catch (err) {}
 
-      // Fallback
       itemsToUpload.forEach(item => todos.unshift(item));
       localStorage.setItem('chronos_todos', JSON.stringify(todos));
       render();
@@ -327,61 +321,29 @@ function normalizeTodo(item) {
   };
 }
 
-// Push Notification Helper with Service Worker Support
+// Push Notification & FCM Helper
 function checkNotificationStatus() {
   const btns = document.querySelectorAll('#btnNotify');
   if ('Notification' in window && Notification.permission === 'granted') {
     btns.forEach(b => {
-      b.textContent = 'Notifications Active';
+      b.textContent = 'FCM Notifications Active';
       b.style.opacity = '0.7';
     });
   }
 }
 
-function requestNotificationPermission() {
+async function handleNotificationButton() {
   if (!('Notification' in window)) {
     showToast('Notifications are not supported by your browser', true);
     return;
   }
 
-  if (Notification.permission === 'granted') {
-    triggerServiceWorkerNotification('Chronos Reminders', 'Notifications are active and working properly!');
-    showToast('Notifications are already active!');
-    return;
-  }
-
-  if (Notification.permission === 'denied') {
-    alert('Notifications are blocked in your browser settings.\n\nTo allow notifications:\n1. Click the lock/site settings icon in your browser URL bar.\n2. Set Notifications to "Allow".\n3. Refresh the page.');
-    showToast('Notifications blocked in browser settings', true);
-    return;
-  }
-
-  Notification.requestPermission().then(permission => {
-    if (permission === 'granted') {
-      checkNotificationStatus();
-      triggerServiceWorkerNotification('Chronos Reminders', 'Notifications enabled successfully!');
-      showToast('Notifications enabled successfully!');
-    } else if (permission === 'denied') {
-      showToast('Notification permission denied', true);
-    }
-  }).catch(err => {
-    console.error('Notification permission error:', err);
-    showToast('Error requesting notification permission', true);
-  });
-}
-
-function triggerServiceWorkerNotification(title, body) {
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.ready.then(reg => {
-      reg.showNotification(title, {
-        body,
-        icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
-        badge: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
-        vibrate: [200, 100, 200]
-      });
-    });
-  } else if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body });
+  const token = await requestFcmToken();
+  if (token) {
+    checkNotificationStatus();
+    showToast('FCM Cloud Push Notifications Active!');
+  } else {
+    showToast('FCM Token generation failed or blocked', true);
   }
 }
 
@@ -407,7 +369,12 @@ function startDeadlineTimer() {
 
 function triggerAlert(t) {
   playChime();
-  triggerServiceWorkerNotification(`Task Deadline Reached: ${t.title}`, t.notes || `Category: ${t.category} | Priority: ${t.priority}`);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`Task Deadline Reached: ${t.title}`, {
+      body: t.notes || `Category: ${t.category} | Priority: ${t.priority}`,
+      icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png'
+    });
+  }
   showToast(`Deadline Reached: ${t.title}`, true);
 }
 
@@ -434,7 +401,7 @@ function setupEventListeners() {
   document.getElementById('todoForm').addEventListener('submit', handleAddTodo);
 
   document.querySelectorAll('#btnNotify').forEach(b => {
-    b.addEventListener('click', requestNotificationPermission);
+    b.addEventListener('click', handleNotificationButton);
   });
 
   document.getElementById('searchInput').addEventListener('input', (e) => {
