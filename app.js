@@ -1,5 +1,5 @@
 /**
- * Chronos - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB + FCM Connected)
+ * Poison - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB + FCM Connected)
  */
 
 import { initThreeBackground, updateThreeTheme } from './three-bg.js';
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initFCM() {
   initFirebaseMessaging((payload) => {
     // Foreground message handler
-    const title = payload.notification ? payload.notification.title : (payload.data ? payload.data.title : 'Chronos Alert');
+    const title = payload.notification ? payload.notification.title : (payload.data ? payload.data.title : 'Poison Alert');
     const body = payload.notification ? payload.notification.body : (payload.data ? payload.data.body : 'Deadline Reached!');
     
     playChime();
@@ -81,7 +81,7 @@ function switchScreen(screenName) {
 
 // Theme Management
 function initTheme() {
-  const savedTheme = localStorage.getItem('chronos_theme') || 'dark';
+  const savedTheme = localStorage.getItem('poison_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
   updateThemeIcon(savedTheme);
 }
@@ -91,7 +91,7 @@ function toggleTheme() {
   const nextTheme = current === 'dark' ? 'light' : 'dark';
   
   document.documentElement.setAttribute('data-theme', nextTheme);
-  localStorage.setItem('chronos_theme', nextTheme);
+  localStorage.setItem('poison_theme', nextTheme);
   
   updateThemeIcon(nextTheme);
   updateThreeTheme(nextTheme);
@@ -118,7 +118,7 @@ async function loadTodos() {
     }
   } catch (err) {
     updateDbStatus(false);
-    const saved = localStorage.getItem('chronos_todos');
+    const saved = localStorage.getItem('poison_todos');
     todos = saved ? JSON.parse(saved) : [];
   }
   render();
@@ -173,7 +173,7 @@ async function handleAddTodo(e) {
     }
   } catch (err) {
     todos.unshift(newTodo);
-    localStorage.setItem('chronos_todos', JSON.stringify(todos));
+    localStorage.setItem('poison_todos', JSON.stringify(todos));
     showToast('Saved to local storage');
   }
 
@@ -263,7 +263,7 @@ function processFile(file) {
       } catch (err) {}
 
       itemsToUpload.forEach(item => todos.unshift(item));
-      localStorage.setItem('chronos_todos', JSON.stringify(todos));
+      localStorage.setItem('poison_todos', JSON.stringify(todos));
       render();
       switchScreen('tasks');
       showToast(`Imported ${itemsToUpload.length} tasks locally`);
@@ -524,7 +524,7 @@ function render() {
             body: JSON.stringify({ completed: task.completed })
           });
         } catch (err) {
-          localStorage.setItem('chronos_todos', JSON.stringify(todos));
+          localStorage.setItem('poison_todos', JSON.stringify(todos));
         }
         render();
       }
@@ -539,7 +539,7 @@ function render() {
         await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
         showToast('Task deleted from Neon DB');
       } catch (err) {
-        localStorage.setItem('chronos_todos', JSON.stringify(todos));
+        localStorage.setItem('poison_todos', JSON.stringify(todos));
         showToast('Task deleted');
       }
       render();

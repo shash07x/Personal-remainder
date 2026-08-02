@@ -1,5 +1,5 @@
 /**
- * Chronos SaaS - Vercel Serverless API Express Backend (Neon DB Connected)
+ * Poison SaaS - Vercel Serverless API Express Backend (Neon DB Connected)
  */
 
 require('dotenv').config();
@@ -60,8 +60,8 @@ const INDEX_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Chronos - Enterprise Mobile Multi-Screen Task Manager (Neon DB)</title>
-  <meta name="description" content="Chronos - Enterprise deadline management with multi-screen navigation, Neon PostgreSQL backend, 3D WebGL Three.js background engine, and push notifications.">
+  <title>Poison - Enterprise Mobile Multi-Screen Task Manager (Neon DB)</title>
+  <meta name="description" content="Poison - Enterprise deadline management with multi-screen navigation, Neon PostgreSQL backend, 3D WebGL Three.js background engine, and push notifications.">
   <link rel="stylesheet" href="styles.css">
   <!-- Three.js 3D Engine -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -84,7 +84,7 @@ const INDEX_HTML = `<!DOCTYPE html>
           </svg>
         </div>
         <div>
-          <h1 class="brand-name">Chronos</h1>
+          <h1 class="brand-name">Poison</h1>
           <p class="brand-sub">Enterprise Deadline Suite</p>
         </div>
       </div>
@@ -216,9 +216,9 @@ const INDEX_HTML = `<!DOCTYPE html>
         
         <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
           <div style="background: var(--bg-input); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
-            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">Web Push & Service Worker Engine</h3>
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">Firebase FCM & Service Worker Engine</h3>
             <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
-              Chronos includes a registered Service Worker (<code>sw.js</code>) that enables background notifications on Chrome, Safari, and Android WebViews.
+              Poison includes Firebase Cloud Messaging (FCM) and a registered Service Worker (<code>firebase-messaging-sw.js</code>) enabling background notifications on Chrome, Safari, and Android WebViews.
             </p>
             <button class="btn btn-primary" id="btnNotify">Enable Push Notifications</button>
           </div>
@@ -242,8 +242,8 @@ const INDEX_HTML = `<!DOCTYPE html>
             <div style="font-weight: 700; color: var(--primary); margin-top: 4px;">Three.js WebGL</div>
           </div>
           <div class="stat-tile">
-            <div class="stat-label">Service Worker</div>
-            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;" id="swStatusText">Active (sw.js)</div>
+            <div class="stat-label">Cloud Push</div>
+            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;" id="swStatusText">FCM Connected</div>
           </div>
         </div>
       </div>
@@ -288,7 +288,7 @@ app.get('/api/health', async (req, res) => {
   await ensureDb();
   try {
     const result = await pool.query('SELECT NOW()');
-    res.json({ status: 'OK', database: 'Neon Postgres Connected', time: result.rows[0].now });
+    res.json({ status: 'OK', database: 'Neon Postgres Connected', app: 'Poison', time: result.rows[0].now });
   } catch (err) {
     res.status(500).json({ status: 'ERROR', message: err.message });
   }

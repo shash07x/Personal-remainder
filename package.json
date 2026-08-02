@@ -1,7 +1,7 @@
 {
   "name": "personal-remainder",
   "version": "1.0.0",
-  "description": "Chronos SaaS ToDo & Reminder Application",
+  "description": "Poison SaaS Task & Reminder Application",
   "main": "api/index.js",
   "scripts": {
     "start": "node server.js",
