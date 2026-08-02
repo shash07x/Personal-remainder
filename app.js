@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadTodos();
   setupEventListeners();
   startDeadlineTimer();
+  checkNotificationStatus();
 });
 
 // Theme Management
@@ -151,7 +152,7 @@ async function handleAddTodo(e) {
   document.getElementById('todoForm').reset();
 }
 
-// Bulk Upload to Neon DB
+// Robust Bulk CSV / JSON Parser
 function handleBulkFileUpload(e) {
   if (e.target.files.length) {
     processFile(e.target.files[0]);
@@ -175,29 +176,42 @@ function processFile(file) {
         showToast('Invalid JSON file format', true);
         return;
       }
-    } else if (filename.endsWith('.csv')) {
-      const lines = text.split('\n');
-      if (lines.length > 1) {
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    } else if (filename.endsWith('.csv') || filename.endsWith('.txt')) {
+      const lines = text.split(/\r?\n/);
+      if (lines.length > 0) {
+        const rawHeaders = parseCsvLine(lines[0]);
+        const headers = rawHeaders.map(h => h.trim().toLowerCase().replace(/[\r\n"']/g, ''));
+        
+        const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('task') || h.includes('name') || h.includes('todo'));
+        const categoryIdx = headers.findIndex(h => h.includes('cat'));
+        const priorityIdx = headers.findIndex(h => h.includes('prio'));
+        const deadlineIdx = headers.findIndex(h => h.includes('dead') || h.includes('time') || h.includes('date'));
+        const notesIdx = headers.findIndex(h => h.includes('note') || h.includes('desc'));
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          const cols = line.split(',');
-          if (cols.length) {
-            const obj = {};
-            headers.forEach((h, idx) => {
-              obj[h] = cols[idx] ? cols[idx].trim().replace(/^"|"$/g, '') : '';
+          const cols = parseCsvLine(line);
+          
+          let titleVal = titleIdx !== -1 && cols[titleIdx] ? cols[titleIdx].trim() : '';
+          if (!titleVal && titleIdx === -1 && cols[0]) {
+            titleVal = cols[0].trim();
+          }
+
+          if (titleVal) {
+            const catVal = categoryIdx !== -1 && cols[categoryIdx] ? cols[categoryIdx].trim() : (cols[1] || 'General');
+            const prioVal = priorityIdx !== -1 && cols[priorityIdx] ? cols[priorityIdx].trim() : (cols[2] || 'Medium');
+            const deadVal = deadlineIdx !== -1 && cols[deadlineIdx] ? cols[deadlineIdx].trim() : cols[3];
+            const notesVal = notesIdx !== -1 && cols[notesIdx] ? cols[notesIdx].trim() : (cols[4] || '');
+
+            itemsToUpload.push({
+              id: 'task_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 3),
+              title: titleVal,
+              category: catVal || 'General',
+              priority: normalizePriority(prioVal),
+              deadlineIso: formatDeadline(deadVal),
+              notes: notesVal
             });
-            if (obj.title) {
-              itemsToUpload.push({
-                id: 'task_' + Date.now() + '_' + i,
-                title: obj.title,
-                category: obj.category || 'General',
-                priority: obj.priority || 'Medium',
-                deadlineIso: formatDeadline(obj.deadline),
-                notes: obj.notes || ''
-              });
-            }
           }
         }
       }
@@ -223,11 +237,38 @@ function processFile(file) {
       render();
       showToast(`Imported ${itemsToUpload.length} tasks locally`);
     } else {
-      showToast('No valid records found in file', true);
+      showToast('No valid records found in CSV/JSON file', true);
     }
   };
 
   reader.readAsText(file);
+}
+
+function parseCsvLine(text) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"' || char === "'") {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(cur.trim().replace(/^["']|["']$/g, ''));
+      cur = '';
+    } else {
+      cur += char;
+    }
+  }
+  result.push(cur.trim().replace(/^["']|["']$/g, ''));
+  return result;
+}
+
+function normalizePriority(val) {
+  if (!val) return 'Medium';
+  const v = val.toString().toLowerCase();
+  if (v.includes('high') || v.includes('1') || v.includes('urgent')) return 'High';
+  if (v.includes('low') || v.includes('3')) return 'Low';
+  return 'Medium';
 }
 
 function formatDeadline(val) {
@@ -241,12 +282,63 @@ function normalizeTodo(item) {
     id: item.id || ('task_' + Date.now()),
     title: item.title || item.Title || 'Untitled Task',
     category: item.category || item.Category || 'General',
-    priority: item.priority || item.Priority || 'Medium',
+    priority: normalizePriority(item.priority || item.Priority),
     deadlineIso: item.deadlineIso || item.deadline || formatDeadline(item.Deadline),
     notes: item.notes || item.Notes || '',
     completed: !!item.completed,
     notified: !!item.notified
   };
+}
+
+// Push Notification Helper
+function checkNotificationStatus() {
+  const btn = document.getElementById('btnNotify');
+  if (!btn) return;
+  if ('Notification' in window && Notification.permission === 'granted') {
+    btn.textContent = 'Notifications Active';
+    btn.style.opacity = '0.7';
+  }
+}
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    showToast('Notifications are not supported by your browser', true);
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    new Notification('Chronos Reminders', {
+      body: 'Notifications are active and working properly!',
+      icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png'
+    });
+    showToast('Notifications are already active!');
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    alert('Notifications are currently blocked in your browser settings for this site.\n\nTo allow notifications:\n1. Click the site settings/lock icon near the browser URL bar.\n2. Change Notifications to "Allow".\n3. Refresh the page.');
+    showToast('Notifications are blocked in browser settings', true);
+    return;
+  }
+
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      const btn = document.getElementById('btnNotify');
+      if (btn) {
+        btn.textContent = 'Notifications Active';
+        btn.style.opacity = '0.7';
+      }
+      new Notification('Chronos Reminders', {
+        body: 'Notifications enabled successfully! You will receive alerts at exact task deadlines.'
+      });
+      showToast('Notifications enabled successfully!');
+    } else if (permission === 'denied') {
+      showToast('Notification permission denied', true);
+    }
+  }).catch(err => {
+    console.error('Notification permission error:', err);
+    showToast('Error requesting notification permission', true);
+  });
 }
 
 // Timer & Notifications
@@ -273,7 +365,7 @@ function startDeadlineTimer() {
 
 function triggerAlert(t) {
   playChime();
-  if (Notification.permission === 'granted') {
+  if ('Notification' in window && Notification.permission === 'granted') {
     new Notification(`Task Deadline Reached: ${t.title}`, {
       body: t.notes || `Category: ${t.category} | Priority: ${t.priority}`,
       tag: t.id
@@ -299,15 +391,6 @@ function playChime() {
   } catch (e) {}
 }
 
-function requestNotificationPermission() {
-  Notification.requestPermission().then(permission => {
-    if (permission === 'granted') {
-      document.getElementById('btnNotify').style.display = 'none';
-      showToast('Notifications enabled');
-    }
-  });
-}
-
 // Setup Listeners
 function setupEventListeners() {
   document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
@@ -316,7 +399,6 @@ function setupEventListeners() {
   const btnNotify = document.getElementById('btnNotify');
   if (btnNotify) {
     btnNotify.addEventListener('click', requestNotificationPermission);
-    if (Notification.permission === 'granted') btnNotify.style.display = 'none';
   }
 
   document.getElementById('searchInput').addEventListener('input', (e) => {
@@ -508,5 +590,5 @@ function showToast(msg, isError = false) {
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(10px)';
-  }, 3000);
+  }, 3500);
 }
