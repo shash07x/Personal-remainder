@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Chronos - Immersive Enterprise Deadline SaaS (Neon DB)</title>
-  <meta name="description" content="Chronos - Enterprise deadline management, Neon PostgreSQL database backend, 3D WebGL background engine, and light/dark theme system.">
+  <title>Chronos - Enterprise Mobile Multi-Screen Task Manager (Neon DB)</title>
+  <meta name="description" content="Chronos - Enterprise deadline management with multi-screen navigation, Neon PostgreSQL backend, 3D WebGL Three.js background engine, and push notifications.">
   <link rel="stylesheet" href="styles.css">
   <!-- Three.js 3D Engine -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-  <!-- Three.js Immersive 3D Canvas Container -->
+  <!-- Three.js Immersive 3D Canvas Background -->
   <div id="three-canvas-container"></div>
 
   <!-- App Main Wrapper -->
   <div class="app-wrapper">
 
-    <!-- Top Navigation / Header -->
+    <!-- Top Navigation Header -->
     <header class="header-bar">
       <div class="brand-group">
         <div class="brand-logo-mark">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
@@ -32,45 +32,75 @@
         </div>
       </div>
 
+      <!-- Desktop & Tablet Screen Tabs -->
+      <nav class="page-nav-tabs">
+        <button class="nav-tab-btn active" data-screen="tasks">Tasks</button>
+        <button class="nav-tab-btn" data-screen="create">+ New Task</button>
+        <button class="nav-tab-btn" data-screen="insights">Insights</button>
+      </nav>
+
       <div class="header-controls">
         <div class="status-pill active" id="dbStatusPill">
           <span class="status-dot"></span>
-          <span class="status-text">Neon DB Connecting...</span>
+          <span class="status-text">Neon DB Connected</span>
         </div>
-        <button class="btn btn-outline" id="btnNotify">Enable Push Notifications</button>
         <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle Light/Dark Theme">
           <!-- Icon injected by app.js -->
         </button>
       </div>
     </header>
 
-    <!-- Metrics Stats Grid -->
-    <section class="stats-container">
-      <div class="stat-tile">
-        <div class="stat-label">Total Tasks</div>
-        <div class="stat-number" id="countTotal">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Pending</div>
-        <div class="stat-number" id="countPending">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Overdue</div>
-        <div class="stat-number" id="countOverdue" style="color: var(--accent-high);">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Completed</div>
-        <div class="stat-number" id="countCompleted" style="color: var(--accent-low);">0</div>
-      </div>
-    </section>
+    <!-- SCREEN 1: TASKS FEED (HOME DASHBOARD) -->
+    <div id="screen-tasks" class="view-screen active">
+      <!-- Metrics Summary Bar -->
+      <section class="stats-container">
+        <div class="stat-tile">
+          <div class="stat-label">Total Tasks</div>
+          <div class="stat-number" id="countTotal">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Pending</div>
+          <div class="stat-number" id="countPending">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Overdue</div>
+          <div class="stat-number" id="countOverdue" style="color: var(--accent-high);">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Completed</div>
+          <div class="stat-number" id="countCompleted" style="color: var(--accent-low);">0</div>
+        </div>
+      </section>
 
-    <!-- Main Workspace Layout -->
-    <div class="app-grid">
+      <!-- Task Feed & Filters -->
+      <main class="card-panel">
+        <div class="filter-bar">
+          <div class="search-field-wrapper">
+            <svg class="search-icon-svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="searchInput" class="input-control" placeholder="Search tasks by keyword...">
+          </div>
 
-      <!-- Left Column: Create Task & Bulk Import -->
-      <aside class="card-panel">
-        <h2 class="panel-header">Create Task</h2>
+          <div class="tab-group">
+            <button class="tab-btn active" data-filter="all">All</button>
+            <button class="tab-btn" data-filter="today">Today</button>
+            <button class="tab-btn" data-filter="upcoming">Upcoming</button>
+            <button class="tab-btn" data-filter="overdue">Overdue</button>
+            <button class="tab-btn" data-filter="completed">Completed</button>
+          </div>
+        </div>
 
+        <div id="taskList" class="task-feed">
+          <!-- Dynamically populated by app.js -->
+        </div>
+      </main>
+    </div>
+
+    <!-- SCREEN 2: CREATE TASK & BULK IMPORT -->
+    <div id="screen-create" class="view-screen">
+      <div class="card-panel">
+        <h2 class="panel-header">Create New Task</h2>
         <form id="todoForm">
           <div class="form-field">
             <label class="form-label">Task Title *</label>
@@ -113,46 +143,77 @@
 
         <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 24px 0;">
 
-        <!-- Bulk Import Section -->
         <h2 class="panel-header">Bulk Import Tasks</h2>
         <div class="dropzone-box" id="dropZoneBox">
           <div class="dropzone-title">Drop CSV or JSON File</div>
           <div class="dropzone-desc">Click to browse or drag file here</div>
           <input type="file" id="bulkFileInput" accept=".csv, .json" style="display: none;">
         </div>
-        <p style="font-size: 0.76rem; color: var(--text-muted); text-align: center; margin-top: 10px;">
-          Supports CSV formatted files (e.g. <code>sample-todos.csv</code>)
-        </p>
-      </aside>
-
-      <!-- Right Column: Task Feed & Filters -->
-      <main class="card-panel">
-        
-        <div class="filter-bar">
-          <div class="search-field-wrapper">
-            <svg class="search-icon-svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" id="searchInput" class="input-control" placeholder="Search tasks by keyword...">
-          </div>
-
-          <div class="tab-group">
-            <button class="tab-btn active" data-filter="all">All</button>
-            <button class="tab-btn" data-filter="today">Today</button>
-            <button class="tab-btn" data-filter="upcoming">Upcoming</button>
-            <button class="tab-btn" data-filter="overdue">Overdue</button>
-            <button class="tab-btn" data-filter="completed">Completed</button>
-          </div>
-        </div>
-
-        <div id="taskList" class="task-feed">
-          <!-- Dynamically populated by app.js -->
-        </div>
-
-      </main>
-
+      </div>
     </div>
+
+    <!-- SCREEN 3: SYSTEM INSIGHTS & NOTIFICATION CENTER -->
+    <div id="screen-insights" class="view-screen">
+      <div class="card-panel">
+        <h2 class="panel-header">Push Notification & Mobile Setup</h2>
+        
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+          <div style="background: var(--bg-input); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">Web Push & Service Worker Engine</h3>
+            <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+              Chronos includes a registered Service Worker (<code>sw.js</code>) that enables background notifications on Chrome, Safari, and Android WebViews.
+            </p>
+            <button class="btn btn-primary" id="btnNotify">Enable Push Notifications</button>
+          </div>
+
+          <div style="background: var(--bg-input); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">OneSignal Free Mobile Push (Median / GoNative APK)</h3>
+            <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5;">
+              For converted Median APKs, integrate the <strong>OneSignal Free Push Plugin</strong> directly from your Median App Builder dashboard. It provides 100% free unlimited push notifications for Android & iOS!
+            </p>
+          </div>
+        </div>
+
+        <h2 class="panel-header">System Architecture Status</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+          <div class="stat-tile">
+            <div class="stat-label">Database Backend</div>
+            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;">Neon PostgreSQL</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">3D Engine</div>
+            <div style="font-weight: 700; color: var(--primary); margin-top: 4px;">Three.js WebGL</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Service Worker</div>
+            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;" id="swStatusText">Active (sw.js)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
+
+  <!-- Mobile Floating Action Button (FAB) -->
+  <button class="mobile-fab" id="mobileFabBtn" title="Create New Task">
+    <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="bottom-nav-bar">
+    <button class="bottom-nav-item active" data-screen="tasks">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      <span>Tasks</span>
+    </button>
+    <button class="bottom-nav-item" data-screen="create">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>Create</span>
+    </button>
+    <button class="bottom-nav-item" data-screen="insights">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Insights</span>
+    </button>
+  </nav>
 
   <!-- Application Script -->
   <script type="module" src="app.js"></script>

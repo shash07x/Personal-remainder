@@ -1,5 +1,5 @@
 /**
- * Chronos - Enterprise SaaS ToDo & Reminder Engine (Neon DB Connected)
+ * Chronos - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB Connected)
  */
 
 import { initThreeBackground, updateThreeTheme } from './three-bg.js';
@@ -11,20 +11,78 @@ let todos = [];
 let currentFilter = 'all';
 let searchQuery = '';
 let timerInterval = null;
-let isNeonConnected = false;
-
-// Default empty task state
-const DEFAULT_TODOS = [];
+let activeScreen = 'tasks';
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initThreeBackground();
+  registerServiceWorker();
   loadTodos();
   setupEventListeners();
+  setupScreenNavigation();
   startDeadlineTimer();
   checkNotificationStatus();
 });
+
+// Register Service Worker for Mobile & Web Push
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => {
+        console.log('[Chronos SW] Registered successfully:', reg.scope);
+        const swText = document.getElementById('swStatusText');
+        if (swText) swText.textContent = 'Active (sw.js Registered)';
+      })
+      .catch(err => {
+        console.warn('[Chronos SW] Registration failed:', err);
+      });
+  }
+}
+
+// Multi-Screen Router
+function setupScreenNavigation() {
+  // Top nav tabs & bottom nav items
+  document.querySelectorAll('[data-screen]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const target = e.currentTarget.dataset.screen;
+      if (target) switchScreen(target);
+    });
+  });
+
+  // Mobile Floating Action Button (FAB)
+  const fab = document.getElementById('mobileFabBtn');
+  if (fab) {
+    fab.addEventListener('click', () => switchScreen('create'));
+  }
+}
+
+function switchScreen(screenName) {
+  activeScreen = screenName;
+
+  // Toggle active view screen container
+  document.querySelectorAll('.view-screen').forEach(screen => {
+    screen.classList.remove('active');
+  });
+
+  const activeEl = document.getElementById(`screen-${screenName}`);
+  if (activeEl) activeEl.classList.add('active');
+
+  // Sync desktop top tabs
+  document.querySelectorAll('.nav-tab-btn').forEach(tab => {
+    if (tab.dataset.screen === screenName) tab.classList.add('active');
+    else tab.classList.remove('active');
+  });
+
+  // Sync mobile bottom nav bar items
+  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+    if (item.dataset.screen === screenName) item.classList.add('active');
+    else item.classList.remove('active');
+  });
+
+  // Smooth scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 // Theme Management
 function initTheme() {
@@ -59,17 +117,14 @@ async function loadTodos() {
     const res = await fetch(API_BASE);
     if (res.ok) {
       todos = await res.json();
-      isNeonConnected = true;
       updateDbStatus(true);
     } else {
       throw new Error('Server returned non-200');
     }
   } catch (err) {
-    console.warn('[Neon DB] API offline or error, falling back to LocalStorage:', err.message);
-    isNeonConnected = false;
     updateDbStatus(false);
     const saved = localStorage.getItem('chronos_todos');
-    todos = saved ? JSON.parse(saved) : DEFAULT_TODOS;
+    todos = saved ? JSON.parse(saved) : [];
   }
   render();
 }
@@ -129,9 +184,10 @@ async function handleAddTodo(e) {
 
   render();
   document.getElementById('todoForm').reset();
+  switchScreen('tasks'); // Auto navigate back to Tasks screen on creation!
 }
 
-// Robust Bulk CSV / JSON Parser
+// Bulk CSV / JSON Parser
 function handleBulkFileUpload(e) {
   if (e.target.files.length) {
     processFile(e.target.files[0]);
@@ -206,6 +262,7 @@ function processFile(file) {
         if (res.ok) {
           showToast(`Imported ${itemsToUpload.length} tasks to Neon Postgres!`);
           await loadTodos();
+          switchScreen('tasks');
           return;
         }
       } catch (err) {}
@@ -214,6 +271,7 @@ function processFile(file) {
       itemsToUpload.forEach(item => todos.unshift(item));
       localStorage.setItem('chronos_todos', JSON.stringify(todos));
       render();
+      switchScreen('tasks');
       showToast(`Imported ${itemsToUpload.length} tasks locally`);
     } else {
       showToast('No valid records found in CSV/JSON file', true);
@@ -269,13 +327,14 @@ function normalizeTodo(item) {
   };
 }
 
-// Push Notification Helper
+// Push Notification Helper with Service Worker Support
 function checkNotificationStatus() {
-  const btn = document.getElementById('btnNotify');
-  if (!btn) return;
+  const btns = document.querySelectorAll('#btnNotify');
   if ('Notification' in window && Notification.permission === 'granted') {
-    btn.textContent = 'Notifications Active';
-    btn.style.opacity = '0.7';
+    btns.forEach(b => {
+      b.textContent = 'Notifications Active';
+      b.style.opacity = '0.7';
+    });
   }
 }
 
@@ -286,30 +345,21 @@ function requestNotificationPermission() {
   }
 
   if (Notification.permission === 'granted') {
-    new Notification('Chronos Reminders', {
-      body: 'Notifications are active and working properly!',
-      icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png'
-    });
+    triggerServiceWorkerNotification('Chronos Reminders', 'Notifications are active and working properly!');
     showToast('Notifications are already active!');
     return;
   }
 
   if (Notification.permission === 'denied') {
-    alert('Notifications are currently blocked in your browser settings for this site.\n\nTo allow notifications:\n1. Click the site settings/lock icon near the browser URL bar.\n2. Change Notifications to "Allow".\n3. Refresh the page.');
-    showToast('Notifications are blocked in browser settings', true);
+    alert('Notifications are blocked in your browser settings.\n\nTo allow notifications:\n1. Click the lock/site settings icon in your browser URL bar.\n2. Set Notifications to "Allow".\n3. Refresh the page.');
+    showToast('Notifications blocked in browser settings', true);
     return;
   }
 
   Notification.requestPermission().then(permission => {
     if (permission === 'granted') {
-      const btn = document.getElementById('btnNotify');
-      if (btn) {
-        btn.textContent = 'Notifications Active';
-        btn.style.opacity = '0.7';
-      }
-      new Notification('Chronos Reminders', {
-        body: 'Notifications enabled successfully! You will receive alerts at exact task deadlines.'
-      });
+      checkNotificationStatus();
+      triggerServiceWorkerNotification('Chronos Reminders', 'Notifications enabled successfully!');
       showToast('Notifications enabled successfully!');
     } else if (permission === 'denied') {
       showToast('Notification permission denied', true);
@@ -320,19 +370,32 @@ function requestNotificationPermission() {
   });
 }
 
+function triggerServiceWorkerNotification(title, body) {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
+        badge: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
+        vibrate: [200, 100, 200]
+      });
+    });
+  } else if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body });
+  }
+}
+
 // Timer & Notifications
 function startDeadlineTimer() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     const now = new Date();
-    let updated = false;
 
     todos.forEach(t => {
       if (!t.completed && !t.notified) {
         const d = new Date(t.deadlineIso);
         if (now >= d) {
           t.notified = true;
-          updated = true;
           triggerAlert(t);
         }
       }
@@ -344,12 +407,7 @@ function startDeadlineTimer() {
 
 function triggerAlert(t) {
   playChime();
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`Task Deadline Reached: ${t.title}`, {
-      body: t.notes || `Category: ${t.category} | Priority: ${t.priority}`,
-      tag: t.id
-    });
-  }
+  triggerServiceWorkerNotification(`Task Deadline Reached: ${t.title}`, t.notes || `Category: ${t.category} | Priority: ${t.priority}`);
   showToast(`Deadline Reached: ${t.title}`, true);
 }
 
@@ -375,10 +433,9 @@ function setupEventListeners() {
   document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
   document.getElementById('todoForm').addEventListener('submit', handleAddTodo);
 
-  const btnNotify = document.getElementById('btnNotify');
-  if (btnNotify) {
-    btnNotify.addEventListener('click', requestNotificationPermission);
-  }
+  document.querySelectorAll('#btnNotify').forEach(b => {
+    b.addEventListener('click', requestNotificationPermission);
+  });
 
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase();
@@ -445,11 +502,15 @@ function render() {
 
   if (filtered.length === 0) {
     listEl.innerHTML = `
-      <div class="empty-box">
-        <div class="empty-title">No tasks found</div>
-        <p style="font-size: 0.85rem;">Add a task above or upload a CSV file to populate tasks.</p>
+      <div class="empty-box" style="text-align: center; padding: 40px 20px; background: var(--bg-input); border-radius: 14px; border: 1px dashed var(--border-color);">
+        <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">No tasks found</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">Switch to Create tab to add your first deadline.</p>
+        <button class="btn btn-primary" data-action="goto-create">Create New Task</button>
       </div>
     `;
+    listEl.querySelectorAll('[data-action="goto-create"]').forEach(b => {
+      b.addEventListener('click', () => switchScreen('create'));
+    });
     return;
   }
 
