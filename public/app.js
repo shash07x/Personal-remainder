@@ -1,0 +1,512 @@
+/**
+ * Chronos - Enterprise SaaS ToDo & Reminder Engine (Neon DB Connected)
+ */
+
+import { initThreeBackground, updateThreeTheme } from './three-bg.js';
+
+const API_BASE = '/api/todos';
+
+// Application State
+let todos = [];
+let currentFilter = 'all';
+let searchQuery = '';
+let timerInterval = null;
+let isNeonConnected = false;
+
+// Initial Fallback Sample Tasks
+const DEFAULT_TODOS = [
+  {
+    id: 'task-1',
+    title: 'Submit Project Deliverables & Architecture Report',
+    category: 'Work',
+    priority: 'High',
+    deadlineIso: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    notes: 'Verify build metrics and deployment checklist.',
+    completed: false,
+    notified: false
+  },
+  {
+    id: 'task-2',
+    title: 'Executive Team Sync Meeting',
+    category: 'Work',
+    priority: 'Medium',
+    deadlineIso: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    notes: 'Review Q3 roadmap and resource planning.',
+    completed: false,
+    notified: false
+  }
+];
+
+// Initialize Application
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initThreeBackground();
+  loadTodos();
+  setupEventListeners();
+  startDeadlineTimer();
+});
+
+// Theme Management
+function initTheme() {
+  const savedTheme = localStorage.getItem('chronos_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const nextTheme = current === 'dark' ? 'light' : 'dark';
+  
+  document.documentElement.setAttribute('data-theme', nextTheme);
+  localStorage.setItem('chronos_theme', nextTheme);
+  
+  updateThemeIcon(nextTheme);
+  updateThreeTheme(nextTheme);
+  showToast(`Switched to ${nextTheme.toUpperCase()} theme`);
+}
+
+function updateThemeIcon(theme) {
+  const btn = document.getElementById('themeToggleBtn');
+  if (!btn) return;
+  btn.innerHTML = theme === 'dark' 
+    ? `<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`
+    : `<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`;
+}
+
+// Neon Database API Methods
+async function loadTodos() {
+  try {
+    const res = await fetch(API_BASE);
+    if (res.ok) {
+      todos = await res.json();
+      isNeonConnected = true;
+      updateDbStatus(true);
+    } else {
+      throw new Error('Server returned non-200');
+    }
+  } catch (err) {
+    console.warn('[Neon DB] API offline or error, falling back to LocalStorage:', err.message);
+    isNeonConnected = false;
+    updateDbStatus(false);
+    const saved = localStorage.getItem('chronos_todos');
+    todos = saved ? JSON.parse(saved) : DEFAULT_TODOS;
+  }
+  render();
+}
+
+function updateDbStatus(connected) {
+  const pill = document.getElementById('dbStatusPill');
+  if (!pill) return;
+  if (connected) {
+    pill.classList.add('active');
+    pill.querySelector('.status-text').textContent = 'Neon DB Connected';
+  } else {
+    pill.classList.remove('active');
+    pill.querySelector('.status-text').textContent = 'Local Cache Mode';
+  }
+}
+
+// Add Single Task to Neon DB
+async function handleAddTodo(e) {
+  e.preventDefault();
+  const title = document.getElementById('todoTitle').value.trim();
+  const category = document.getElementById('todoCategory').value;
+  const priority = document.getElementById('todoPriority').value;
+  const deadline = document.getElementById('todoDeadline').value;
+  const notes = document.getElementById('todoNotes').value.trim();
+
+  if (!title || !deadline) return;
+
+  const newTodo = {
+    id: 'task_' + Date.now(),
+    title,
+    category,
+    priority,
+    deadlineIso: deadline,
+    notes,
+    completed: false,
+    notified: false
+  };
+
+  try {
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTodo)
+    });
+    if (res.ok) {
+      const savedTask = await res.json();
+      todos.unshift(savedTask);
+      showToast('Task saved to Neon Postgres!');
+    } else {
+      throw new Error('API Error');
+    }
+  } catch (err) {
+    todos.unshift(newTodo);
+    localStorage.setItem('chronos_todos', JSON.stringify(todos));
+    showToast('Saved to local storage');
+  }
+
+  render();
+  document.getElementById('todoForm').reset();
+}
+
+// Bulk Upload to Neon DB
+function handleBulkFileUpload(e) {
+  if (e.target.files.length) {
+    processFile(e.target.files[0]);
+  }
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  const filename = file.name.toLowerCase();
+
+  reader.onload = async (e) => {
+    const text = e.target.result;
+    let itemsToUpload = [];
+
+    if (filename.endsWith('.json')) {
+      try {
+        const parsed = JSON.parse(text);
+        const list = Array.isArray(parsed) ? parsed : [parsed];
+        itemsToUpload = list.map(normalizeTodo);
+      } catch (err) {
+        showToast('Invalid JSON file format', true);
+        return;
+      }
+    } else if (filename.endsWith('.csv')) {
+      const lines = text.split('\n');
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const cols = line.split(',');
+          if (cols.length) {
+            const obj = {};
+            headers.forEach((h, idx) => {
+              obj[h] = cols[idx] ? cols[idx].trim().replace(/^"|"$/g, '') : '';
+            });
+            if (obj.title) {
+              itemsToUpload.push({
+                id: 'task_' + Date.now() + '_' + i,
+                title: obj.title,
+                category: obj.category || 'General',
+                priority: obj.priority || 'Medium',
+                deadlineIso: formatDeadline(obj.deadline),
+                notes: obj.notes || ''
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (itemsToUpload.length > 0) {
+      try {
+        const res = await fetch(`${API_BASE}/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: itemsToUpload })
+        });
+        if (res.ok) {
+          showToast(`Imported ${itemsToUpload.length} tasks to Neon Postgres!`);
+          await loadTodos();
+          return;
+        }
+      } catch (err) {}
+
+      // Fallback
+      itemsToUpload.forEach(item => todos.unshift(item));
+      localStorage.setItem('chronos_todos', JSON.stringify(todos));
+      render();
+      showToast(`Imported ${itemsToUpload.length} tasks locally`);
+    } else {
+      showToast('No valid records found in file', true);
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+function formatDeadline(val) {
+  if (!val) return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16) : d.toISOString().slice(0, 16);
+}
+
+function normalizeTodo(item) {
+  return {
+    id: item.id || ('task_' + Date.now()),
+    title: item.title || item.Title || 'Untitled Task',
+    category: item.category || item.Category || 'General',
+    priority: item.priority || item.Priority || 'Medium',
+    deadlineIso: item.deadlineIso || item.deadline || formatDeadline(item.Deadline),
+    notes: item.notes || item.Notes || '',
+    completed: !!item.completed,
+    notified: !!item.notified
+  };
+}
+
+// Timer & Notifications
+function startDeadlineTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const now = new Date();
+    let updated = false;
+
+    todos.forEach(t => {
+      if (!t.completed && !t.notified) {
+        const d = new Date(t.deadlineIso);
+        if (now >= d) {
+          t.notified = true;
+          updated = true;
+          triggerAlert(t);
+        }
+      }
+    });
+
+    updateCountdowns();
+  }, 1000);
+}
+
+function triggerAlert(t) {
+  playChime();
+  if (Notification.permission === 'granted') {
+    new Notification(`Task Deadline Reached: ${t.title}`, {
+      body: t.notes || `Category: ${t.category} | Priority: ${t.priority}`,
+      tag: t.id
+    });
+  }
+  showToast(`Deadline Reached: ${t.title}`, true);
+}
+
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.25);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  } catch (e) {}
+}
+
+function requestNotificationPermission() {
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      document.getElementById('btnNotify').style.display = 'none';
+      showToast('Notifications enabled');
+    }
+  });
+}
+
+// Setup Listeners
+function setupEventListeners() {
+  document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+  document.getElementById('todoForm').addEventListener('submit', handleAddTodo);
+
+  const btnNotify = document.getElementById('btnNotify');
+  if (btnNotify) {
+    btnNotify.addEventListener('click', requestNotificationPermission);
+    if (Notification.permission === 'granted') btnNotify.style.display = 'none';
+  }
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    searchQuery = e.target.value.toLowerCase();
+    render();
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+      e.target.classList.add('active');
+      currentFilter = e.target.dataset.filter;
+      render();
+    });
+  });
+
+  const fileInput = document.getElementById('bulkFileInput');
+  const dropZone = document.getElementById('dropZoneBox');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', handleBulkFileUpload);
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--primary)';
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = 'var(--border-color)';
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--border-color)';
+    if (e.dataTransfer.files.length) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+// Rendering Logic
+function render() {
+  const listEl = document.getElementById('taskList');
+  const now = new Date();
+
+  const filtered = todos.filter(t => {
+    if (searchQuery && !t.title.toLowerCase().includes(searchQuery) && !t.notes.toLowerCase().includes(searchQuery)) {
+      return false;
+    }
+    const d = new Date(t.deadlineIso);
+    const isOverdue = !t.completed && now > d;
+
+    if (currentFilter === 'today') return d.toDateString() === now.toDateString();
+    if (currentFilter === 'upcoming') return !t.completed && d > now;
+    if (currentFilter === 'overdue') return isOverdue;
+    if (currentFilter === 'completed') return t.completed;
+    return true;
+  });
+
+  // Calculate Metrics
+  document.getElementById('countTotal').textContent = todos.length;
+  document.getElementById('countPending').textContent = todos.filter(t => !t.completed).length;
+  document.getElementById('countOverdue').textContent = todos.filter(t => !t.completed && new Date(t.deadlineIso) < now).length;
+  document.getElementById('countCompleted').textContent = todos.filter(t => t.completed).length;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-box">
+        <div class="empty-title">No tasks found</div>
+        <p style="font-size: 0.85rem;">Add a task above or upload a CSV file to populate tasks.</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(t => {
+    const d = new Date(t.deadlineIso);
+    const isOverdue = !t.completed && now > d;
+    const tagClass = t.priority === 'High' ? 'tag-high' : (t.priority === 'Medium' ? 'tag-med' : 'tag-low');
+
+    return `
+      <div class="task-item p-${t.priority} ${isOverdue ? 'overdue' : ''} ${t.completed ? 'completed' : ''}" data-id="${t.id}">
+        <input type="checkbox" class="task-checkbox" ${t.completed ? 'checked' : ''} data-action="toggle" data-id="${t.id}">
+        <div class="task-body">
+          <div class="task-top-line">
+            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="badge-row">
+              <span class="tag-badge tag-category">${escapeHtml(t.category)}</span>
+              <span class="tag-badge ${tagClass}">${t.priority}</span>
+            </div>
+          </div>
+          ${t.notes ? `<div class="task-notes">${escapeHtml(t.notes)}</div>` : ''}
+          <div class="task-meta-bar">
+            <div>
+              ${formatDate(d)}
+              <span class="time-badge" data-deadline="${t.deadlineIso}">${getCountdownText(d, t.completed)}</span>
+            </div>
+            <button class="btn btn-danger-ghost" data-action="delete" data-id="${t.id}">Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Event handlers
+  listEl.querySelectorAll('[data-action="toggle"]').forEach(chk => {
+    chk.addEventListener('change', async (e) => {
+      const id = e.target.dataset.id;
+      const task = todos.find(item => item.id === id);
+      if (task) {
+        task.completed = e.target.checked;
+        try {
+          await fetch(`${API_BASE}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed: task.completed })
+          });
+        } catch (err) {
+          localStorage.setItem('chronos_todos', JSON.stringify(todos));
+        }
+        render();
+      }
+    });
+  });
+
+  listEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      todos = todos.filter(t => t.id !== id);
+      try {
+        await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+        showToast('Task deleted from Neon DB');
+      } catch (err) {
+        localStorage.setItem('chronos_todos', JSON.stringify(todos));
+        showToast('Task deleted');
+      }
+      render();
+    });
+  });
+}
+
+function updateCountdowns() {
+  document.querySelectorAll('.time-badge').forEach(el => {
+    const iso = el.dataset.deadline;
+    if (iso) {
+      const d = new Date(iso);
+      const parent = el.closest('.task-item');
+      const isCompleted = parent && parent.classList.contains('completed');
+      el.textContent = getCountdownText(d, isCompleted);
+    }
+  });
+}
+
+function getCountdownText(deadline, isCompleted) {
+  if (isCompleted) return 'Completed';
+  const now = new Date();
+  const diffMs = deadline - now;
+  if (diffMs <= 0) return 'OVERDUE';
+  const mins = Math.floor(diffMs / (1000 * 60));
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+
+  if (days > 0) return `In ${days}d ${hrs % 24}h`;
+  if (hrs > 0) return `In ${hrs}h ${mins % 60}m`;
+  return `In ${mins}m ${Math.floor((diffMs / 1000) % 60)}s`;
+}
+
+function formatDate(d) {
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showToast(msg, isError = false) {
+  let toast = document.getElementById('toast-notice');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast-notice';
+    document.body.appendChild(toast);
+  }
+  toast.style.background = isError ? 'var(--accent-high)' : 'var(--primary)';
+  toast.style.color = '#FFFFFF';
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateY(0)';
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+  }, 3000);
+}
