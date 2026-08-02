@@ -1,16 +1,20 @@
 /**
- * Chronos SaaS - Vercel Serverless API Express Backend (Neon DB Connected)
+ * Chronos SaaS - Vercel Serverless API Express Backend (Neon DB Connected + Static File Serving)
  */
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static assets from project root
+app.use(express.static(path.join(__dirname, '..')));
 
 // Neon Postgres Connection Pool
 const pool = new Pool({
@@ -46,7 +50,7 @@ async function ensureDb() {
   }
 }
 
-// Routes
+// API Routes
 
 // Health Check
 app.get('/api/health', async (req, res) => {
@@ -172,6 +176,11 @@ app.delete('/api/todos/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Fallback route serving index.html for single-page app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../index.html'));
 });
 
 module.exports = app;
