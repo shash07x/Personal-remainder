@@ -5,18 +5,12 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from public and root
-app.use(express.static(path.join(__dirname, '../public')));
-app.use(express.static(path.join(__dirname, '..')));
 
 // Neon Postgres Connection String with environment fallback
 const dbUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_S6aLJchBAP8e@ep-muddy-voice-ayqa64fn.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
@@ -53,20 +47,6 @@ async function ensureDb() {
     console.error('[Vercel Neon DB] Init Error:', err.message);
   }
 }
-
-// Explicit Root Route Failsafe Handler
-app.get('/', (req, res) => {
-  const possiblePaths = [
-    path.join(__dirname, '../public/index.html'),
-    path.join(__dirname, '../index.html')
-  ];
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return res.sendFile(p);
-    }
-  }
-  res.status(200).send('<!DOCTYPE html><html><body><h1>Chronos Application Running</h1></body></html>');
-});
 
 // API Routes
 
@@ -194,20 +174,6 @@ app.delete('/api/todos/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// Wildcard SPA Fallback
-app.get('*', (req, res) => {
-  const possiblePaths = [
-    path.join(__dirname, '../public/index.html'),
-    path.join(__dirname, '../index.html')
-  ];
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return res.sendFile(p);
-    }
-  }
-  res.status(200).send('<!DOCTYPE html><html><body><h1>Chronos Application Running</h1></body></html>');
 });
 
 module.exports = app;
