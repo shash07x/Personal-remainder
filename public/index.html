@@ -8,8 +8,16 @@
   <link rel="stylesheet" href="styles.css">
   <!-- Three.js 3D Engine -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- OneSignal SDK for Web Push & Median APK Push -->
+  <!-- OneSignal SDK for Web & Median APK Push -->
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "6f4df272-7f24-42bf-a5fd-f726ef48b0f",
+      });
+    });
+  </script>
 </head>
 <body>
 
@@ -163,7 +171,7 @@
           <div style="background: var(--bg-input); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
             <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">OneSignal Free Mobile Push (Median APK)</h3>
             <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
-              Integrated with OneSignal & Median Native JS Bridge. Tap below to subscribe your mobile device to push notifications.
+              Configured with OneSignal App ID <code>6f4df272-7f24-42bf-a5fd-f726ef48b0f</code>. Tap below to subscribe your mobile device.
             </p>
             <button class="btn btn-primary" id="btnNotify">Enable Push Notifications</button>
           </div>
@@ -171,7 +179,7 @@
           <div style="background: var(--bg-input); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
             <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">Median App Builder Setup</h3>
             <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5;">
-              In your <strong>[median.co](https://median.co)</strong> dashboard, go to <strong>Plugins → OneSignal Push Notifications</strong> and paste your free OneSignal App ID.
+              In your <strong>[median.co](https://median.co)</strong> dashboard tab, go to <strong>Plugins → OneSignal Push Notifications</strong> and paste: <code>6f4df272-7f24-42bf-a5fd-f726ef48b0f</code>.
             </p>
           </div>
         </div>
@@ -188,7 +196,7 @@
           </div>
           <div class="stat-tile">
             <div class="stat-label">Push Engine</div>
-            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;" id="swStatusText">OneSignal Ready</div>
+            <div style="font-weight: 700; color: var(--accent-low); margin-top: 4px;" id="swStatusText">OneSignal Configured</div>
           </div>
         </div>
       </div>
