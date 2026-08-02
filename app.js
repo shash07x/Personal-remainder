@@ -1,5 +1,5 @@
 /**
- * Poison - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB + FCM Connected)
+ * Poison - Enterprise SaaS Multi-Screen ToDo & Reminder Engine (Neon DB + FCM + Median Hybrid Push Connected)
  */
 
 import { initThreeBackground, updateThreeTheme } from './three-bg.js';
@@ -26,19 +26,27 @@ document.addEventListener('DOMContentLoaded', () => {
   checkNotificationStatus();
 });
 
+// Detect Median / GoNative APK Environment
+function isMedianApp() {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes('median') || ua.includes('gonative') || !!window.median || !!window.gonative;
+}
+
 // Initialize Firebase Cloud Messaging (FCM)
 function initFCM() {
-  initFirebaseMessaging((payload) => {
-    // Foreground message handler
-    const title = payload.notification ? payload.notification.title : (payload.data ? payload.data.title : 'Poison Alert');
-    const body = payload.notification ? payload.notification.body : (payload.data ? payload.data.body : 'Deadline Reached!');
-    
-    playChime();
-    showToast(`${title}: ${body}`);
-  });
+  if (!isMedianApp()) {
+    initFirebaseMessaging((payload) => {
+      const title = payload.notification ? payload.notification.title : (payload.data ? payload.data.title : 'Poison Alert');
+      const body = payload.notification ? payload.notification.body : (payload.data ? payload.data.body : 'Deadline Reached!');
+      playChime();
+      showToast(`${title}: ${body}`);
+    });
+  }
 
   const swText = document.getElementById('swStatusText');
-  if (swText) swText.textContent = 'Active (FCM & sw.js Registered)';
+  if (swText) {
+    swText.textContent = isMedianApp() ? 'Median APK Native Mode' : 'FCM & sw.js Active';
+  }
 }
 
 // Multi-Screen Router
@@ -321,10 +329,15 @@ function normalizeTodo(item) {
   };
 }
 
-// Push Notification & FCM Helper
+// Push Notification Helper with Median Native Bridge & Browser Support
 function checkNotificationStatus() {
   const btns = document.querySelectorAll('#btnNotify');
-  if ('Notification' in window && Notification.permission === 'granted') {
+  if (isMedianApp()) {
+    btns.forEach(b => {
+      b.textContent = 'Median Native Push Active';
+      b.style.opacity = '0.85';
+    });
+  } else if ('Notification' in window && Notification.permission === 'granted') {
     btns.forEach(b => {
       b.textContent = 'FCM Notifications Active';
       b.style.opacity = '0.7';
@@ -333,17 +346,40 @@ function checkNotificationStatus() {
 }
 
 async function handleNotificationButton() {
-  if (!('Notification' in window)) {
-    showToast('Notifications are not supported by your browser', true);
+  // 1. Median App Native Bridge Handler
+  if (isMedianApp()) {
+    if (window.median && window.median.oneSignal) {
+      window.median.oneSignal.register();
+      showToast('Requested Median OneSignal Native Permission!');
+    } else if (window.gonative && window.gonative.oneSignal) {
+      window.gonative.oneSignal.register();
+      showToast('Requested Median OneSignal Native Permission!');
+    } else if (window.median && window.median.push) {
+      window.median.push.register();
+      showToast('Requested Median Native Push Permission!');
+    } else if (window.gonative && window.gonative.push) {
+      window.gonative.push.register();
+      showToast('Requested Median Native Push Permission!');
+    } else {
+      // Trigger Median Native JS Bridge Registration URI
+      window.location.href = "gonative://push/register";
+      showToast('Triggered Median Native Push Bridge!');
+    }
+    checkNotificationStatus();
     return;
   }
 
-  const token = await requestFcmToken();
-  if (token) {
-    checkNotificationStatus();
-    showToast('FCM Cloud Push Notifications Active!');
+  // 2. Browser FCM Handler
+  if ('Notification' in window) {
+    const token = await requestFcmToken();
+    if (token) {
+      checkNotificationStatus();
+      showToast('FCM Cloud Push Notifications Active!');
+    } else {
+      showToast('FCM Token requested');
+    }
   } else {
-    showToast('FCM Token generation failed or blocked', true);
+    showToast('Browser notifications unavailable. Using local alert audio chime.');
   }
 }
 
