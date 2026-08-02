@@ -13,29 +13,8 @@ let searchQuery = '';
 let timerInterval = null;
 let isNeonConnected = false;
 
-// Initial Fallback Sample Tasks
-const DEFAULT_TODOS = [
-  {
-    id: 'task-1',
-    title: 'Submit Project Deliverables & Architecture Report',
-    category: 'Work',
-    priority: 'High',
-    deadlineIso: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    notes: 'Verify build metrics and deployment checklist.',
-    completed: false,
-    notified: false
-  },
-  {
-    id: 'task-2',
-    title: 'Executive Team Sync Meeting',
-    category: 'Work',
-    priority: 'Medium',
-    deadlineIso: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    notes: 'Review Q3 roadmap and resource planning.',
-    completed: false,
-    notified: false
-  }
-];
+// Default empty task state
+const DEFAULT_TODOS = [];
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
